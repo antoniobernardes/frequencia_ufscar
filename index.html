@@ -1708,6 +1708,38 @@ input[type="time"]{min-height:48px;}
     await sheetsPost({ action: 'courses', courses });
   }
 
+  // ── Buscar disciplinas do Sheets (leitura) ──
+  async function fetchCoursesFromSheets() {
+    if (!GOOGLE_SHEETS_API || GOOGLE_SHEETS_API.trim() === '') return;
+    try {
+      const url = GOOGLE_SHEETS_API + '?action=getCourses';
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        courses = data;
+        localStorage.setItem('frequencia_courses', JSON.stringify(courses));
+      }
+    } catch (err) {
+      console.warn('Não foi possível buscar disciplinas do Sheets — usando cache local.', err);
+    }
+  }
+
+  // ── Buscar sessões ativas do Sheets (para validar QR no celular do aluno) ──
+  async function fetchActiveSessionsFromSheets() {
+    if (!GOOGLE_SHEETS_API || GOOGLE_SHEETS_API.trim() === '') return;
+    try {
+      const url = GOOGLE_SHEETS_API + '?action=getActiveSessions';
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        activeSessions = data;
+        localStorage.setItem('frequencia_active_sessions', JSON.stringify(activeSessions));
+      }
+    } catch (err) {
+      console.warn('Não foi possível buscar sessões do Sheets — usando cache local.', err);
+    }
+  }
+
   // ── Enviar configuração de curso ──
   async function saveCourseConfigToSheets(cfg) {
     await sheetsPost({ action: 'courseConfig', config: cfg });
@@ -2726,9 +2758,21 @@ input[type="time"]{min-height:48px;}
 
   // ── Init ──
   async function initApp() {
-    await loadData();
-    populateStudentDisciplines();
+    loadData(); // carrega cache local primeiro (rápido)
     showScreen('role-screen');
+    populateStudentDisciplines();
+
+    // Depois busca do Sheets em paralelo (atualiza sem travar a tela)
+    await Promise.all([
+      fetchCoursesFromSheets(),
+      fetchActiveSessionsFromSheets()
+    ]);
+
+    // Atualiza a lista de disciplinas com os dados vindos do Sheets
+    populateStudentDisciplines();
+    if (currentProfessor) {
+      renderDisciplines();
+    }
   }
 
   initApp();
